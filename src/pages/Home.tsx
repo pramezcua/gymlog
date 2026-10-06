@@ -40,6 +40,16 @@ export default function Home() {
           <h2 className="label">Planificado para hoy</h2>
           {planned.map(p => {
             const r = p.routineId ? routineById.get(p.routineId) : undefined;
+            if (p.title) return (
+              <div key={p.id} className="card flex items-center gap-3 p-4">
+                <span className="h-10 w-1.5 rounded-full bg-sky-400" />
+                <div className="flex-1">
+                  <p className="font-semibold">{p.title}</p>
+                  <p className="text-xs text-zinc-500">Otra actividad{p.durationMin ? ` · ${p.durationMin} min` : ''}</p>
+                </div>
+                <button className="btn-ghost" onClick={() => db.calendar.update(p.id, { status: 'done', updatedAt: Date.now() })}>✓ Hecha</button>
+              </div>
+            );
             return (
               <div key={p.id} className="card flex items-center gap-3 p-4">
                 <span className="h-10 w-1.5 rounded-full" style={{ background: r?.color ?? '#71717a' }} />

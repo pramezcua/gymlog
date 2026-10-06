@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid, type Routine, type RoutineItem } from '../db';
 import PageHeader from '../components/PageHeader';
 import ExercisePicker from '../components/ExercisePicker';
+import MediaField from '../components/MediaField';
 import { REST_OPTIONS, RPE_OPTIONS, fmtRepRange, fmtTime, modeOf, parseRepRange } from '../lib/utils';
 
 const COLORS = ['#a3e635', '#38bdf8', '#f97316', '#e879f9', '#facc15', '#f43f5e', '#2dd4bf', '#a78bfa'];
@@ -104,8 +105,17 @@ export default function RoutineEditor() {
                 </select>
               </div>
             </div>
-            <input className="input" placeholder="Notas para esta rutina (opcional)" value={it.notes ?? ''}
+            <textarea className="input min-h-16 py-2" placeholder="Notas / anotaciones (opcional)" value={it.notes ?? ''}
               onChange={e => patchItem(i, { notes: e.target.value || undefined })} />
+            <details className="rounded-xl bg-zinc-800/40 p-2" open={(it.media?.length ?? 0) > 0}>
+              <summary className="cursor-pointer select-none text-sm text-zinc-300">
+                🎬 Vídeos{(it.media?.length ?? 0) > 0 ? ` (${it.media!.length})` : ''}
+              </summary>
+              <div className="pt-2">
+                <MediaField media={it.media ?? []} onChange={media => patchItem(i, { media: media.length ? media : undefined })} />
+                <p className="mt-1 text-[11px] text-zinc-500">Los enlaces que pegues en las notas también se guardan como vídeo.</p>
+              </div>
+            </details>
           </div>
         ))}
         <button onClick={() => setPicker(true)} className="min-h-14 w-full rounded-2xl border-2 border-dashed border-zinc-700 text-zinc-300">+ Añadir ejercicio</button>

@@ -41,6 +41,8 @@ export interface RoutineItem {
   notes?: string;
   /** Duración objetivo por serie/bloque en ejercicios por tiempo (min). */
   targetMin?: number;
+  /** Vídeos propios de este ejercicio dentro de la rutina. */
+  media?: Media[];
 }
 
 /** Plantilla de rutina: Empuje, Jalón, Pierna… */
@@ -82,6 +84,8 @@ export interface SessionExercise {
   notes?: string;
   /** Objetivo copiado de la rutina, p. ej. "3 × 10–12" o "1 × 30 min". */
   target?: string;
+  /** Vídeos copiados de la rutina. */
+  media?: Media[];
   updatedAt?: number;
 }
 
@@ -114,6 +118,10 @@ export interface CalendarEntry {
   routineId?: ID;
   sessionId?: ID;
   status: 'planned' | 'done' | 'skipped';
+  /** Otra actividad que no es una rutina (p. ej. "Entrenamiento Rugby"). */
+  title?: string;
+  durationMin?: number;
+  notes?: string;
   updatedAt: number;
 }
 

@@ -6,9 +6,10 @@ import Stepper from '../components/Stepper';
 import MediaViewer from '../components/MediaViewer';
 import ExercisePicker from '../components/ExercisePicker';
 import Sheet from '../components/Sheet';
+import { DraftInput, DraftTextarea } from '../components/DraftField';
 import {
   REST_OPTIONS, RPE_OPTIONS, addExerciseToSession, avgRpeOf, deleteSession, finishSession,
-  fmtDateLong, fmtTime, fmtVolume, lastWorkSet, modeOf, setSummary, volumeOf,
+  fmtDateLong, fmtTime, fmtVolume, lastWorkSet, mediaInText, mergeMedia, modeOf, setSummary, volumeOf,
 } from '../lib/utils';
 import type { ExerciseMode } from '../db';
 
@@ -103,8 +104,8 @@ export default function SessionLogger() {
           <button onClick={() => nav(-1)} className="-ml-2 h-11 w-9 text-2xl text-zinc-400" aria-label="Volver">‹</button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-zinc-500 first-letter:uppercase">{fmtDateLong(session.date)}</p>
-            <input value={session.type} aria-label="Tipo de sesión"
-              onChange={e => db.sessions.update(id, { type: e.target.value, updatedAt: Date.now() })}
+            <DraftInput value={session.type} aria-label="Tipo de sesión"
+              onSave={v => db.sessions.update(id, { type: v })}
               className="w-full truncate bg-transparent text-lg font-bold outline-none" />
           </div>
           <div className="text-right">
@@ -142,8 +143,8 @@ export default function SessionLogger() {
           + Añadir ejercicio
         </button>
 
-        <textarea className="input min-h-20 py-2" placeholder="Notas de la sesión (sensaciones, molestias…)"
-          value={session.notes ?? ''} onChange={e => db.sessions.update(id, { notes: e.target.value, updatedAt: Date.now() })} />
+        <DraftTextarea className="input min-h-20 py-2" placeholder="Notas de la sesión (sensaciones, molestias…)"
+          value={session.notes ?? ''} onSave={v => db.sessions.update(id, { notes: v || undefined })} />
 
         {active ? (
           <button onClick={() => setConfirm('finish')} className="btn-primary min-h-14 w-full text-lg">Finalizar rutina</button>
@@ -226,6 +227,7 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
   if (!exercise) return null;
   const notes = item.notes ?? exercise.notes;
   const mode = modeOf(exercise);
+  const videos = mergeMedia(item.media, exercise.media, mediaInText(notes));
 
   async function addSet() {
     const last = sets.at(-1) ?? previous;
@@ -252,7 +254,7 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
           {previous && <p className="text-xs text-zinc-500">Anterior: <span className="text-zinc-300">{setSummary(previous, mode)}</span></p>}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {exercise.media.length > 0 && (
+          {videos.length > 0 && (
             <button onClick={() => setShowMedia(v => !v)} className={`btn-ghost px-3 text-sm ${showMedia ? 'text-lime-400' : ''}`} aria-label="Ver vídeo">▶</button>
           )}
           <button onClick={() => setMenu(v => !v)} className="btn-ghost px-3" aria-label="Opciones del ejercicio">⋯</button>
@@ -267,8 +269,10 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
         </div>
       )}
 
-      {showMedia && <div className="mb-2 space-y-2">{exercise.media.map((m, i) => <MediaViewer key={i} media={m} />)}</div>}
-      {notes && <p className="mx-4 mb-2 rounded-lg bg-zinc-800/60 p-2 text-xs text-zinc-300">💡 {notes}</p>}
+      {showMedia && <div className="mb-2 space-y-2">{videos.map((m, i) => <MediaViewer key={i} media={m} />)}</div>}
+      {notes && notes.replace(/https?:\/\/\S+/g, '').trim() && (
+        <p className="mx-4 mb-2 whitespace-pre-line rounded-lg bg-zinc-800/60 p-2 text-xs text-zinc-300">💡 {notes.replace(/https?:\/\/\S+/g, '').trim()}</p>
+      )}
 
       <div className="mx-4 mb-2 flex items-center gap-2 text-xs text-zinc-400">
         <label htmlFor={`rest-${item.id}`}>Descanso entre series</label>

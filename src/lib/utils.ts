@@ -95,6 +95,21 @@ export function mediaFromUrl(raw: string): Media {
   if (/vimeo\.com/.test(url)) return { kind: 'vimeo', url };
   return { kind: 'url', url };
 }
+/** Enlaces http(s) que aparecen dentro de un texto, convertidos en vídeos. */
+export function mediaInText(text?: string): Media[] {
+  return [...new Set(text?.match(/https?:\/\/[^\s<>"']+/gi) ?? [])].map(mediaFromUrl);
+}
+/** Une listas de vídeos sin repetir el mismo enlace/archivo. */
+export function mergeMedia(...lists: (Media[] | undefined)[]): Media[] {
+  const seen = new Set<string>();
+  return lists.flatMap(l => l ?? []).filter(m => {
+    const k = m.url ?? m.blobId ?? '';
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 export const youtubeId = (url = '') => url.match(/(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([\w-]{11})/)?.[1];
 export const vimeoId = (url = '') => url.match(/vimeo\.com\/(?:video\/)?(\d+)/)?.[1];
 
@@ -116,6 +131,7 @@ export async function startSession(opts: { routineId?: ID; date?: string; calend
       await db.sessionExercises.add({
         id: seId, sessionId, exerciseId: it.exerciseId, order, restSec: it.restSec, notes: it.notes,
         target: targetLabel(it, mode),
+        media: mergeMedia(it.media, mediaInText(it.notes)),
       });
       // Peso inicial = última carga usada en ese ejercicio
       const last = await lastWorkSet(it.exerciseId);
@@ -134,7 +150,7 @@ export async function startSession(opts: { routineId?: ID; date?: string; calend
     const planned = opts.calendarId
       ? await db.calendar.get(opts.calendarId)
       : await db.calendar.where('date').equals(date)
-          .filter(c => c.status === 'planned' && !c.sessionId && (!routine || c.routineId === routine.id)).first();
+          .filter(c => c.status === 'planned' && !c.sessionId && !c.title && (!routine || c.routineId === routine.id)).first();
     if (planned) await db.calendar.update(planned.id, { sessionId, updatedAt: t });
   });
   return sessionId;

@@ -11,6 +11,8 @@ import Sheet from '../components/Sheet';
 import { addDays, deleteSession, fmtDateLong, fmtTime, fmtVolume, rpeTone, startOfWeek, startSession, toISODate, todayISO } from '../lib/utils';
 
 type View = 'month' | 'week';
+/** Color de las "otras actividades" (rugby, pádel, correr…), distinto de las rutinas. */
+const ACTIVITY_COLOR = '#38bdf8';
 const fmtKg = (kg: number) => `${Math.round(kg).toLocaleString('es-ES')}`;
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -158,9 +160,10 @@ function EntryChip({ entry, routine, session, compact, overlay }: {
 }) {
   const canDrag = entry.status === 'planned' && !entry.sessionId && !overlay;
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: entry.id, disabled: !canDrag });
-  const done = entry.status === 'done' && session;
-  const name = routine?.name ?? session?.type ?? 'Sesión';
-  const color = routine?.color ?? '#71717a';
+  const isActivity = !!entry.title;
+  const done = entry.status === 'done' && (session || isActivity);
+  const name = entry.title ?? routine?.name ?? session?.type ?? 'Sesión';
+  const color = isActivity ? ACTIVITY_COLOR : routine?.color ?? '#71717a';
 
   if (compact) {
     // Hecha: fondo de color lleno con ✓ · Programada: solo contorno
@@ -170,7 +173,7 @@ function EntryChip({ entry, routine, session, compact, overlay }: {
         style={done
           ? { background: color, color: '#09090b' }
           : { boxShadow: `inset 0 0 0 1px ${color}`, color, touchAction: canDrag ? 'none' : undefined }}
-        title={done ? `${name} · ${fmtVolume(session.totalVolume ?? 0)} movidos` : `${name} (programada)`}>
+        title={done ? (session ? `${name} · ${fmtVolume(session.totalVolume ?? 0)} movidos` : `${name} (hecha)`) : `${name} (programada)`}>
         {done && '✓ '}{name}
       </div>
     );
@@ -196,7 +199,22 @@ function DaySheet({ date, onClose, routines, entries, sessionById, onOpenSession
 }) {
   const [routineId, setRoutineId] = useState('');
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [activity, setActivity] = useState('');
+  // Actividades usadas antes, para sugerirlas al escribir
+  const pastActivities = useLiveQuery(async () => {
+    const all = await db.calendar.filter(c => !!c.title).toArray();
+    return [...new Set(all.sort((a, b) => b.updatedAt - a.updatedAt).map(c => c.title!.trim()))].slice(0, 30);
+  }, []) ?? [];
   if (!date) return null;
+
+  async function addActivity() {
+    const title = activity.trim();
+    if (!title) return;
+    await db.calendar.add({
+      id: uid(), date: date!, title, status: date! <= todayISO() ? 'done' : 'planned', updatedAt: Date.now(),
+    });
+    setActivity('');
+  }
   const isPast = date < todayISO();
 
   async function plan() {
@@ -212,6 +230,10 @@ function DaySheet({ date, onClose, routines, entries, sessionById, onOpenSession
         {entries.map(e => {
           const r = routines.find(x => x.id === e.routineId);
           const s = e.sessionId ? sessionById.get(e.sessionId) : undefined;
+          if (e.title != null) return (
+            <ActivityCard key={e.id} entry={e} confirming={confirmDel === e.id}
+              onAskDelete={() => setConfirmDel(e.id)} onCancelDelete={() => setConfirmDel(null)} />
+          );
           return (
             <div key={e.id} className="card space-y-2 p-3" style={{ borderLeft: `4px solid ${r?.color ?? '#71717a'}` }}>
               <div className="flex items-center justify-between">
@@ -268,6 +290,17 @@ function DaySheet({ date, onClose, routines, entries, sessionById, onOpenSession
         })}
 
         <div className="pt-2">
+          <label className="label" htmlFor="other-activity">Otra actividad</label>
+          <div className="flex gap-2">
+            <input id="other-activity" className="input" list="past-activities" placeholder="p. ej. Entrenamiento Rugby"
+              value={activity} onChange={e => setActivity(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addActivity(); }} />
+            <datalist id="past-activities">{pastActivities.map(t => <option key={t} value={t} />)}</datalist>
+            <button className="btn-primary" disabled={!activity.trim()} onClick={addActivity}>Añadir</button>
+          </div>
+        </div>
+
+        <div className="pt-2">
           <label className="label" htmlFor="plan-routine">{isPast ? 'Añadir una rutina a este día' : 'Programar una rutina'}</label>
           <div className="flex gap-2">
             <select id="plan-routine" className="input" value={routineId} onChange={e => setRoutineId(e.target.value)}>
@@ -282,3 +315,54 @@ function DaySheet({ date, onClose, routines, entries, sessionById, onOpenSession
   );
 }
 
+
+/** Tarjeta de una "otra actividad" en la hoja del día: nombre, duración, notas, hecha/pendiente y eliminar. */
+function ActivityCard({ entry, confirming, onAskDelete, onCancelDelete }: {
+  entry: CalendarEntry; confirming: boolean; onAskDelete: () => void; onCancelDelete: () => void;
+}) {
+  const [title, setTitle] = useState(entry.title ?? '');
+  const [notes, setNotes] = useState(entry.notes ?? '');
+  const [dur, setDur] = useState(entry.durationMin != null ? String(entry.durationMin) : '');
+  function commitDur() {
+    const n = dur.trim() ? Math.max(0, Math.round(+dur)) : undefined;
+    if (n !== undefined && !Number.isFinite(n)) { setDur(entry.durationMin != null ? String(entry.durationMin) : ''); return; }
+    if (n !== entry.durationMin) upd({ durationMin: n });
+  }
+  const upd = (p: Partial<CalendarEntry>) => db.calendar.update(entry.id, p);
+  const done = entry.status === 'done';
+
+  return (
+    <div className="card space-y-2 p-3" style={{ borderLeft: `4px solid ${ACTIVITY_COLOR}` }}>
+      <div className="flex items-center gap-2">
+        <input aria-label="Nombre de la actividad" className="min-w-0 flex-1 bg-transparent font-semibold outline-none"
+          value={title} onChange={e => setTitle(e.target.value)} onBlur={() => title.trim() && title !== entry.title && upd({ title: title.trim() })} />
+        <span className={`shrink-0 text-xs ${done ? 'text-lime-400' : 'text-zinc-500'}`}>{done ? '✓ hecha' : entry.status === 'skipped' ? 'saltada' : 'programada'}</span>
+      </div>
+      <div className="flex items-center gap-2 text-sm text-zinc-400">
+        <label htmlFor={`dur-${entry.id}`}>Duración</label>
+        <input id={`dur-${entry.id}`} type="number" inputMode="numeric" min={0} placeholder="—" className="input h-9 min-h-9 w-20 text-center"
+          value={dur} onChange={e => setDur(e.target.value)} onBlur={commitDur}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+        <span>min</span>
+      </div>
+      <textarea className="input min-h-12 py-2 text-sm" placeholder="Notas (opcional)" value={notes}
+        onChange={e => setNotes(e.target.value)} onBlur={() => notes !== (entry.notes ?? '') && upd({ notes: notes || undefined })} />
+      {confirming ? (
+        <div className="space-y-2 rounded-xl border border-rose-500/40 p-3">
+          <p className="text-sm">¿Eliminar «{entry.title}» de este día?</p>
+          <div className="flex gap-2">
+            <button className="btn-ghost flex-1 text-sm" onClick={onCancelDelete}>Cancelar</button>
+            <button className="btn-danger flex-1 text-sm" onClick={async () => { await db.calendar.delete(entry.id); onCancelDelete(); }}>Eliminar</button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-ghost text-sm" onClick={() => upd({ status: done ? 'planned' : 'done' })}>
+            {done ? 'Marcar pendiente' : '✓ Marcar hecha'}
+          </button>
+          <button className="btn-danger text-sm" onClick={onAskDelete}>Eliminar</button>
+        </div>
+      )}
+    </div>
+  );
+}
