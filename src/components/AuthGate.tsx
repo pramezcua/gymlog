@@ -11,6 +11,32 @@ const AccountContext = createContext<Account>(null);
 /** Cuenta actual (null en modo local sin Supabase). */
 export const useAccount = () => useContext(AccountContext);
 
+/** ¿Se ha abierto la app desde un enlace de correo? Se lee al cargar, antes de limpiar la URL. */
+const landing = (() => {
+  const q = new URLSearchParams(location.search);
+  const h = new URLSearchParams(location.hash.replace(/^#\/?/, ''));
+  return {
+    fromEmail: q.has('code') || q.has('flow') || h.has('error_description'),
+    flow: q.get('flow'), // 'signup' | 'recovery'
+    error: q.get('error_description') ?? h.get('error_description'),
+  };
+})();
+
+function landingNotice(): Notice | null {
+  if (!landing.fromEmail) return null;
+  if (landing.error) {
+    return { ok: false, text: /expired|invalid/i.test(landing.error)
+      ? 'El enlace del correo ha caducado o ya se había usado. Inicia sesión; si aún no puedes, pide otro correo.'
+      : `No se pudo completar el enlace del correo: ${landing.error}` };
+  }
+  if (landing.flow === 'recovery') {
+    return { ok: false, text: 'Para cambiar la contraseña, abre el enlace del correo en el mismo navegador en el que lo pediste. Si no, vuelve a pedirlo desde aquí.' };
+  }
+  return { ok: true, text: '¡Email confirmado! Ya puedes iniciar sesión con tu email y contraseña. Si tienes la app instalada en el móvil, ábrela e inicia sesión allí.' };
+}
+
+type Notice = { ok: boolean; text: string };
+
 type Phase =
   | { kind: 'loading'; text?: string }
   | { kind: 'signedOut' }
@@ -45,8 +71,8 @@ export default function AuthGate({ children }: { children: (key: string) => Reac
     }
 
     supabase.auth.getSession().then(({ data }) => {
-      // Limpia ?code=… de la URL tras volver de un enlace de correo (ya procesado por supabase-js)
-      if (location.search.includes('code=')) history.replaceState(null, '', appUrl() + location.hash);
+      // Limpia la URL tras volver de un enlace de correo (supabase-js ya ha usado el código)
+      if (landing.fromEmail) history.replaceState(null, '', appUrl() + (landing.error ? '' : location.hash));
       if (data.session) enter(data.session.user);
       else setPhase(p => (p.kind === 'recovery' ? p : { kind: 'signedOut' }));
     });
@@ -61,7 +87,7 @@ export default function AuthGate({ children }: { children: (key: string) => Reac
   if (!cloudEnabled) return <AccountContext.Provider value={null}>{children('local')}</AccountContext.Provider>;
   if (phase.kind === 'loading') return <Splash text={phase.text} />;
   if (phase.kind === 'recovery') return <RecoveryScreen onDone={() => setPhase({ kind: 'loading' })} />;
-  if (phase.kind === 'signedOut') return <LoginScreen />;
+  if (phase.kind === 'signedOut') return <LoginScreen initialNotice={landingNotice()} />;
 
   const account: Account = {
     userId: phase.user.id,
@@ -126,13 +152,13 @@ function Logo() {
   );
 }
 
-function LoginScreen() {
+function LoginScreen({ initialNotice }: { initialNotice: Notice | null }) {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<Notice | null>(initialNotice);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -142,14 +168,14 @@ function LoginScreen() {
         const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password });
         if (error) throw error;
       } else if (mode === 'signup') {
-        const { data, error } = await supabase!.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: appUrl() } });
+        const { data, error } = await supabase!.auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: `${appUrl()}?flow=signup` } });
         if (error) throw error;
         if (!data.session) {
-          setMsg({ ok: true, text: `Te hemos enviado un correo a ${email.trim()}. Pulsa el enlace para confirmar la cuenta y después inicia sesión aquí.` });
+          setMsg({ ok: true, text: `Te hemos enviado un correo a ${email.trim()}. Pulsa el enlace para confirmar la cuenta (mira también en spam) y después inicia sesión aquí.` });
           setMode('login');
         }
       } else {
-        const { error } = await supabase!.auth.resetPasswordForEmail(email.trim(), { redirectTo: appUrl() });
+        const { error } = await supabase!.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${appUrl()}?flow=recovery` });
         if (error) throw error;
         setMsg({ ok: true, text: 'Si el email tiene cuenta, recibirás un enlace para elegir una contraseña nueva. Ábrelo en este mismo navegador.' });
       }
