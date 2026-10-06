@@ -1,6 +1,6 @@
 # GymLog · Bitácora de entrenamiento
 
-PWA *mobile-first* y en modo oscuro para registrar entrenamientos de gimnasio. Funciona sin conexión, guarda los datos en el propio navegador (IndexedDB) y se aloja gratis en GitHub Pages.
+PWA *mobile-first* y en modo oscuro para registrar entrenamientos de gimnasio. Funciona sin conexión (IndexedDB), cada usuario tiene su cuenta con los datos sincronizados entre dispositivos (Supabase, opcional) y se aloja gratis en GitHub Pages.
 
 **App:** https://pramezcua.github.io/gymlog/
 
@@ -14,9 +14,27 @@ PWA *mobile-first* y en modo oscuro para registrar entrenamientos de gimnasio. F
 - **Historial y progreso:** 1RM estimado (Epley) por ejercicio, en gráfica y en tabla.
 - **Copias de seguridad:** exportar e importar en JSON (combinando o reemplazando los datos).
 
+## Cuentas y sincronización (Supabase)
+
+Si `src/config.ts` tiene vacíos la URL y la clave, la app funciona en **modo local**: sin cuentas y con los datos solo en el dispositivo. Para activar las cuentas:
+
+1. Crea un proyecto gratuito en https://supabase.com.
+2. En **SQL Editor**, pega y ejecuta `supabase/schema.sql`.
+3. En **Authentication → URL Configuration**, pon `https://pramezcua.github.io/gymlog/` como *Site URL* y añádela también a *Redirect URLs*.
+4. En **Project Settings → API**, copia la *Project URL* y la clave *anon / publishable* en `src/config.ts`. Nunca uses la clave `service_role`.
+5. Ejecuta `npm run deploy`.
+
+**Cómo funciona:**
+- Cada dispositivo guarda una copia local por usuario (`gymlog-<userId>`) y la app sigue funcionando sin conexión.
+- Cada cambio se sincroniza a los pocos segundos con la tabla `records`, y también al volver la conexión, al abrir la app y cada minuto.
+- Los conflictos se resuelven por *last-write-wins* (gana el cambio más reciente) y los borrados se propagan a los demás dispositivos.
+- *Row Level Security* garantiza que cada usuario solo accede a sus filas.
+- Al cerrar sesión se borra la copia local del dispositivo.
+- Los vídeos subidos como archivo no se sincronizan; usa enlaces.
+
 ## Stack
 
-Vite · React · TypeScript · Tailwind CSS v4 · Dexie (IndexedDB) · React Router (`HashRouter`) · @dnd-kit · vite-plugin-pwa.
+Vite · React · TypeScript · Tailwind CSS v4 · Dexie (IndexedDB) · Supabase (Auth + Postgres) · React Router (`HashRouter`) · @dnd-kit · vite-plugin-pwa.
 
 ## Desarrollo local
 

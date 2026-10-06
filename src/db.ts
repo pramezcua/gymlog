@@ -74,6 +74,7 @@ export interface SessionExercise {
   /** Descanso ESPECÍFICO entre series; sobrescribe el global. */
   restSec?: number;
   notes?: string;
+  updatedAt?: number;
 }
 
 export interface WorkSet {
@@ -92,6 +93,7 @@ export interface WorkSet {
   restTakenSec?: number;
   done: boolean;
   completedAt?: number;
+  updatedAt?: number;
 }
 
 /** Planificación en el calendario. */
@@ -111,7 +113,11 @@ export interface MediaBlob {
   name: string;
 }
 
-class GymDB extends Dexie {
+/** Tablas que se sincronizan con la nube (los Blobs de `media` se quedan en el dispositivo). */
+export const SYNC_TABLES = ['exercises', 'routines', 'sessions', 'sessionExercises', 'sets', 'calendar'] as const;
+export type SyncTable = (typeof SYNC_TABLES)[number];
+
+export class GymDB extends Dexie {
   exercises!: Table<Exercise, ID>;
   routines!: Table<Routine, ID>;
   sessions!: Table<Session, ID>;
@@ -120,8 +126,8 @@ class GymDB extends Dexie {
   calendar!: Table<CalendarEntry, ID>;
   media!: Table<MediaBlob, ID>;
 
-  constructor() {
-    super('gymlog');
+  constructor(name: string) {
+    super(name);
     this.version(1).stores({
       exercises: 'id, name, muscle',
       routines: 'id, name',
@@ -131,10 +137,79 @@ class GymDB extends Dexie {
       calendar: 'id, date, routineId, sessionId, status',
       media: 'id',
     });
+    // v2: índice updatedAt para detectar cambios pendientes de sincronizar
+    this.version(2).stores({
+      exercises: 'id, name, muscle, updatedAt',
+      routines: 'id, name, updatedAt',
+      sessions: 'id, date, routineId, status, updatedAt',
+      sessionExercises: 'id, sessionId, exerciseId, updatedAt',
+      sets: 'id, sessionId, sessionExerciseId, exerciseId, completedAt, updatedAt',
+      calendar: 'id, date, routineId, sessionId, status, updatedAt',
+      media: 'id',
+    });
   }
 }
 
-export const db = new GymDB();
+/** Nombre de la base local sin cuenta (modo solo-dispositivo). */
+export const LOCAL_DB_NAME = 'gymlog';
+
+/**
+ * Base de datos activa. Es un `let` exportado: al iniciar sesión se sustituye por la base
+ * del usuario y todos los módulos ven la nueva instancia (enlace vivo de ES modules).
+ */
+export let db = createDb(LOCAL_DB_NAME);
+
+type ChangeListener = () => void;
+let onLocalChange: ChangeListener | null = null;
+export function setLocalChangeListener(fn: ChangeListener | null) { onLocalChange = fn; }
+
+/** Transacciones que aplican datos llegados de la nube: no se re-marcan ni generan borrados. */
+const REMOTE = Symbol('remote');
+export function markRemote(tx: unknown) { (tx as Record<symbol, boolean>)[REMOTE] = true; }
+const isRemote = (tx: unknown) => !!(tx as Record<symbol, boolean> | undefined)?.[REMOTE];
+
+const tombKey = (dbName: string) => `gymlog.tombstones.${dbName}`;
+export type Tombstone = { tbl: SyncTable; id: ID; at: number };
+export function readTombstones(dbName = db.name): Tombstone[] {
+  try { return JSON.parse(localStorage.getItem(tombKey(dbName)) ?? '[]'); } catch { return []; }
+}
+export function writeTombstones(list: Tombstone[], dbName = db.name) {
+  try { localStorage.setItem(tombKey(dbName), JSON.stringify(list)); } catch { /* sin storage */ }
+}
+
+function createDb(name: string) {
+  const d = new GymDB(name);
+  for (const t of SYNC_TABLES) {
+    const table = d.table(t);
+    // Cada alta/cambio local se sella con updatedAt: así el motor de sync sabe qué subir.
+    table.hook('creating', (_pk, obj, tx) => {
+      if (isRemote(tx)) return;
+      (obj as { updatedAt?: number }).updatedAt = Date.now();
+      onLocalChange?.();
+    });
+    table.hook('updating', (mods, _pk, _obj, tx) => {
+      if (isRemote(tx)) return;
+      onLocalChange?.();
+      return { ...mods, updatedAt: Date.now() };
+    });
+    // Los borrados se recuerdan como "lápidas" para propagarlos a otros dispositivos.
+    table.hook('deleting', (pk, _obj, tx) => {
+      if (isRemote(tx)) return;
+      writeTombstones([...readTombstones(name), { tbl: t, id: pk as ID, at: Date.now() }], name);
+      onLocalChange?.();
+    });
+  }
+  return d;
+}
+
+/** Cambia a la base de datos local de un usuario (o a la anónima si no hay usuario). */
+export function switchDatabase(userId: string | null) {
+  const name = userId ? `gymlog-${userId}` : LOCAL_DB_NAME;
+  if (db.name === name) return db;
+  db.close();
+  db = createDb(name);
+  return db;
+}
 
 const BACKUP_TABLES = ['exercises', 'routines', 'sessions', 'sessionExercises', 'sets', 'calendar'] as const;
 
