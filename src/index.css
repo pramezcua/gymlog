@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { color-scheme: dark; -webkit-tap-highlight-color: transparent; }
+html, body { background: #09090b; color: #f4f4f5; }
+body { overscroll-behavior-y: none; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+@utility btn { @apply inline-flex items-center justify-center gap-1 min-h-11 px-4 rounded-xl font-medium select-none transition active:scale-[.97] disabled:opacity-40; }
+@utility btn-primary { @apply btn bg-lime-400 text-zinc-950 font-bold; }
+@utility btn-ghost { @apply btn bg-zinc-800 text-zinc-100 active:bg-zinc-700; }
+@utility btn-danger { @apply btn bg-rose-500/15 text-rose-300 active:bg-rose-500/25; }
+@utility card { @apply rounded-2xl bg-zinc-900 border border-zinc-800; }
+@utility input { @apply w-full min-h-11 rounded-xl bg-zinc-800 border border-zinc-700 px-3 text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-lime-400; }
+@utility label { @apply block text-xs font-medium uppercase tracking-wide text-zinc-400 mb-1; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
