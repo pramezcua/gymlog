@@ -20,6 +20,8 @@ const EXERCISES: [string, Muscle, string][] = [
   ['Hip thrust', 'glúteo', 'Barbilla al pecho, bloqueo con glúteo arriba.'],
   ['Elevación de gemelos', 'gemelo', 'Pausa abajo en estiramiento.'],
   ['Plancha', 'core', 'Registrar segundos como reps.'],
+  ['Bicicleta estática', 'cardio', 'Ajusta el sillín a la altura de la cadera.'],
+  ['Cinta de correr', 'cardio', 'Inclinación 1 % para simular el exterior.'],
 ];
 
 export async function seedIfEmpty() {

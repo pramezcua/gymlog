@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { db, uid, MUSCLES, type Exercise, type Muscle } from '../db';
+import { db, uid, MUSCLES, type Exercise, type ExerciseMode, type Muscle } from '../db';
 import PageHeader from '../components/PageHeader';
 import MediaViewer from '../components/MediaViewer';
-import { mediaFromUrl } from '../lib/utils';
+import { mediaFromUrl, modeOf } from '../lib/utils';
 
 const MAX_MB = 50;
 
@@ -68,6 +68,16 @@ export default function ExerciseEditor() {
           <select id="emuscle" className="input capitalize" value={ex.muscle} onChange={e => patch({ muscle: e.target.value as Muscle })}>
             {MUSCLES.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
+        </div>
+        <div>
+          <span className="label">Tipo de registro</span>
+          <div className="flex rounded-xl bg-zinc-800 p-1 text-sm" role="radiogroup" aria-label="Tipo de registro">
+            {([['reps', 'Peso y repeticiones'], ['time', 'Tiempo y distancia']] as [ExerciseMode, string][]).map(([m, txt]) => (
+              <button key={m} type="button" role="radio" aria-checked={modeOf(ex) === m} onClick={() => patch({ mode: m })}
+                className={`flex-1 rounded-lg py-2 ${modeOf(ex) === m ? 'bg-zinc-950 text-lime-400' : 'text-zinc-400'}`}>{txt}</button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-zinc-500">Usa «Tiempo y distancia» para bicicleta, cinta, elíptica, remo…</p>
         </div>
         <div>
           <label className="label" htmlFor="enotes">Notas e instrucciones técnicas</label>

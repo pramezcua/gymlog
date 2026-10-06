@@ -5,10 +5,12 @@ import { db, uid, type SessionExercise, type WorkSet } from '../db';
 import Stepper from '../components/Stepper';
 import MediaViewer from '../components/MediaViewer';
 import ExercisePicker from '../components/ExercisePicker';
+import Sheet from '../components/Sheet';
 import {
   REST_OPTIONS, RPE_OPTIONS, addExerciseToSession, avgRpeOf, deleteSession, finishSession,
-  fmtDateLong, fmtTime, fmtVolume, lastWorkSet, volumeOf,
+  fmtDateLong, fmtTime, fmtVolume, lastWorkSet, modeOf, setSummary, volumeOf,
 } from '../lib/utils';
+import type { ExerciseMode } from '../db';
 
 const REST_KEY = 'gymlog.rest';
 
@@ -109,6 +111,9 @@ export default function SessionLogger() {
             <p className={`font-mono text-2xl tabular-nums ${active ? 'text-lime-400' : 'text-zinc-300'}`}>{fmtTime(elapsed)}</p>
             <p className="text-[11px] text-zinc-500">{doneCount} series · {fmtVolume(volumeOf(allSets))}</p>
           </div>
+          {active && (
+            <button onClick={() => setConfirm('finish')} className="btn-primary ml-1 min-h-11 px-3 text-sm">Finalizar</button>
+          )}
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-400">
           <label className="flex items-center gap-1">Descanso global
@@ -141,7 +146,7 @@ export default function SessionLogger() {
           value={session.notes ?? ''} onChange={e => db.sessions.update(id, { notes: e.target.value, updatedAt: Date.now() })} />
 
         {active ? (
-          <button onClick={() => setConfirm('finish')} className="btn-primary min-h-14 w-full text-lg">Finalizar sesión</button>
+          <button onClick={() => setConfirm('finish')} className="btn-primary min-h-14 w-full text-lg">Finalizar rutina</button>
         ) : (
           <button onClick={() => db.sessions.update(id, { status: 'active', updatedAt: Date.now() })} className="btn-ghost w-full">
             Reabrir sesión
@@ -149,22 +154,34 @@ export default function SessionLogger() {
         )}
         <button onClick={() => setConfirm('delete')} className="btn-danger w-full">Eliminar sesión</button>
 
-        {confirm && (
-          <div className="card space-y-3 border-zinc-700 p-4">
-            <p className="font-medium">
-              {confirm === 'finish' ? '¿Finalizar y guardar la sesión?' : '¿Eliminar la sesión y todas sus series? No se puede deshacer.'}
-            </p>
+      </main>
+
+      <Sheet open={confirm != null} onClose={() => setConfirm(null)}
+        title={confirm === 'finish' ? 'Finalizar rutina' : 'Eliminar sesión'}>
+        {confirm === 'finish' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-zinc-800 p-3"><p className="text-lg font-bold tabular-nums">{fmtTime(elapsed)}</p><p className="text-[11px] text-zinc-400">duración</p></div>
+              <div className="rounded-xl bg-zinc-800 p-3"><p className="text-lg font-bold tabular-nums">{doneCount}</p><p className="text-[11px] text-zinc-400">series hechas</p></div>
+              <div className="rounded-xl bg-zinc-800 p-3"><p className="text-lg font-bold tabular-nums">{fmtVolume(volumeOf(allSets))}</p><p className="text-[11px] text-zinc-400">volumen</p></div>
+            </div>
+            {doneCount === 0 && <p className="rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">No has marcado ninguna serie como hecha (✓). Puedes finalizar igualmente.</p>}
+            <p className="text-sm text-zinc-400">Se guardará en tu historial y en el calendario: {fmtDateLong(session.date)}.</p>
+            <div className="flex gap-2">
+              <button className="btn-ghost flex-1" onClick={() => setConfirm(null)}>Seguir entrenando</button>
+              <button className="btn-primary flex-1" onClick={async () => { await finishSession(id); setRest(null); setConfirm(null); nav('/historial'); }}>Finalizar y guardar</button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p>¿Eliminar la sesión y todas sus series? No se puede deshacer.</p>
             <div className="flex gap-2">
               <button className="btn-ghost flex-1" onClick={() => setConfirm(null)}>Cancelar</button>
-              {confirm === 'finish' ? (
-                <button className="btn-primary flex-1" onClick={async () => { await finishSession(id); setRest(null); setConfirm(null); nav('/historial'); }}>Finalizar</button>
-              ) : (
-                <button className="btn-danger flex-1" onClick={async () => { setRest(null); await deleteSession(id); nav('/'); }}>Eliminar</button>
-              )}
+              <button className="btn-danger flex-1" onClick={async () => { setRest(null); await deleteSession(id); nav('/'); }}>Eliminar</button>
             </div>
           </div>
         )}
-      </main>
+      </Sheet>
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={exId => addExerciseToSession(id, exId)} />
 
@@ -208,13 +225,16 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
 
   if (!exercise) return null;
   const notes = item.notes ?? exercise.notes;
+  const mode = modeOf(exercise);
 
   async function addSet() {
     const last = sets.at(-1) ?? previous;
     await db.sets.add({
       id: uid(), sessionId: item.sessionId, sessionExerciseId: item.id, exerciseId: item.exerciseId,
       idx: sets.length ? Math.max(...sets.map(s => s.idx)) + 1 : 0, kind: 'work',
-      reps: last?.reps ?? 10, weight: last?.weight ?? 0, unit: last?.unit ?? 'kg',
+      reps: mode === 'time' ? 0 : last?.reps ?? 10, weight: mode === 'time' ? 0 : last?.weight ?? 0, unit: last?.unit ?? 'kg',
+      durationSec: mode === 'time' ? last?.durationSec ?? 0 : undefined,
+      distanceKm: mode === 'time' ? last?.distanceKm : undefined,
       rpe: last?.rpe, rir: last?.rir, done: false,
     });
   }
@@ -227,8 +247,9 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
           <h2 className="font-semibold leading-tight">{exercise.name}</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
             <span className="capitalize">{exercise.muscle}</span>
-            {previous && <> · Anterior: <span className="text-zinc-300">{previous.weight} {previous.unit} × {previous.reps}{previous.rpe != null ? ` @${previous.rpe}` : ''}</span></>}
+            {item.target && <> · Objetivo: <span className="text-lime-400">{item.target}</span></>}
           </p>
+          {previous && <p className="text-xs text-zinc-500">Anterior: <span className="text-zinc-300">{setSummary(previous, mode)}</span></p>}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {exercise.media.length > 0 && (
@@ -260,19 +281,23 @@ function ExerciseCard({ item, sets, defaultRest, onComplete, isFirst, isLast, on
       </div>
 
       <div className="grid grid-cols-[2.25rem_1fr_1fr_3.25rem] gap-2 px-4 text-[11px] uppercase tracking-wide text-zinc-500">
-        <span>Serie</span><span className="text-center">Peso ({sets[0]?.unit ?? 'kg'})</span><span className="text-center">Reps</span><span className="text-center">Hecha</span>
+        <span>{mode === 'time' ? 'Bloque' : 'Serie'}</span>
+        {mode === 'time'
+          ? <><span className="text-center">Tiempo (min)</span><span className="text-center">Distancia (km)</span></>
+          : <><span className="text-center">Peso ({sets[0]?.unit ?? 'kg'})</span><span className="text-center">Reps</span></>}
+        <span className="text-center">Hecha</span>
       </div>
       <ul className="divide-y divide-zinc-800">
         {sets.map(s => (
-          <SetRow key={s.id} set={s} label={s.kind === 'warmup' ? 'C' : String(++workNo)} onComplete={() => onComplete(s, restSec)} />
+          <SetRow key={s.id} set={s} mode={mode} label={s.kind === 'warmup' ? 'C' : String(++workNo)} onComplete={() => onComplete(s, restSec)} />
         ))}
       </ul>
-      <button onClick={addSet} className="min-h-12 w-full font-medium text-lime-400 active:bg-zinc-800">+ Serie</button>
+      <button onClick={addSet} className="min-h-12 w-full font-medium text-lime-400 active:bg-zinc-800">{mode === 'time' ? '+ Bloque' : '+ Serie'}</button>
     </section>
   );
 }
 
-function SetRow({ set, label, onComplete }: { set: WorkSet; label: string; onComplete: () => void }) {
+function SetRow({ set, mode, label, onComplete }: { set: WorkSet; mode: ExerciseMode; label: string; onComplete: () => void }) {
   const upd = (p: Partial<WorkSet>) => db.sets.update(set.id, p);
   const [more, setMore] = useState(false);
 
@@ -281,8 +306,17 @@ function SetRow({ set, label, onComplete }: { set: WorkSet; label: string; onCom
       <div className="grid grid-cols-[2.25rem_1fr_1fr_3.25rem] items-center gap-2">
         <button onClick={() => setMore(v => !v)} aria-label="Opciones de la serie"
           className={`h-12 rounded-lg text-sm font-bold ${set.kind === 'warmup' ? 'text-amber-400' : 'text-zinc-400'}`}>{label}</button>
-        <Stepper label="peso" value={set.weight} step={set.unit === 'kg' ? 2.5 : 5} onChange={v => upd({ weight: v })} />
-        <Stepper label="repeticiones" value={set.reps} step={1} onChange={v => upd({ reps: Math.round(v) })} />
+        {mode === 'time' ? (
+          <>
+            <Stepper label="minutos" value={Math.round(((set.durationSec ?? 0) / 60) * 10) / 10} step={1} onChange={v => upd({ durationSec: Math.round(v * 60) })} />
+            <Stepper label="kilómetros" value={set.distanceKm ?? 0} step={0.5} onChange={v => upd({ distanceKm: v || undefined })} />
+          </>
+        ) : (
+          <>
+            <Stepper label="peso" value={set.weight} step={set.unit === 'kg' ? 2.5 : 5} onChange={v => upd({ weight: v })} />
+            <Stepper label="repeticiones" value={set.reps} step={1} onChange={v => upd({ reps: Math.round(v) })} />
+          </>
+        )}
         <button onClick={() => (set.done ? upd({ done: false, completedAt: undefined, restTakenSec: undefined }) : onComplete())}
           aria-label={set.done ? 'Desmarcar serie' : 'Completar serie'} aria-pressed={set.done}
           className={`h-12 rounded-xl text-xl font-bold transition ${set.done ? 'bg-lime-400 text-zinc-950' : 'bg-zinc-800 text-zinc-500'}`}>✓</button>
@@ -310,7 +344,7 @@ function SetRow({ set, label, onComplete }: { set: WorkSet; label: string; onCom
           <button className="btn-ghost text-sm" onClick={() => upd({ kind: set.kind === 'warmup' ? 'work' : 'warmup' })}>
             {set.kind === 'warmup' ? 'Efectiva' : 'Calentamiento'}
           </button>
-          <button className="btn-ghost text-sm" onClick={() => upd({ unit: set.unit === 'kg' ? 'lb' : 'kg' })}>
+          <button className="btn-ghost text-sm" disabled={mode === 'time'} onClick={() => upd({ unit: set.unit === 'kg' ? 'lb' : 'kg' })}>
             Usar {set.unit === 'kg' ? 'lb' : 'kg'}
           </button>
           <button className="btn-danger text-sm" onClick={() => db.sets.delete(set.id)}>Borrar</button>

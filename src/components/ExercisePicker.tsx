@@ -54,6 +54,9 @@ export default function ExercisePicker({ open, onClose, onPick }: {
           </select>
         </div>
       )}
+      {query && !exists && muscle === 'cardio' && (
+        <p className="mt-1 text-xs text-zinc-500">Los ejercicios de cardio se registran por tiempo y distancia.</p>
+      )}
 
     </Sheet>
   );

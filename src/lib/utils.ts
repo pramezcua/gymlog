@@ -1,8 +1,38 @@
-import { db, uid, type ID, type Media, type WorkSet } from '../db';
+import { db, uid, type Exercise, type ExerciseMode, type ID, type Media, type RoutineItem, type WorkSet } from '../db';
 
 export const REST_OPTIONS = [45, 60, 90, 120, 150, 180, 240, 300];
 /** Escala RPE de 0 a 10 en pasos de 0,5. */
 export const RPE_OPTIONS = Array.from({ length: 21 }, (_, i) => i / 2);
+
+/** Modo de registro de un ejercicio (cardio se registra por tiempo si no se indica otra cosa). */
+export function modeOf(ex?: Pick<Exercise, 'mode' | 'muscle'>): ExerciseMode {
+  return ex?.mode ?? (ex?.muscle === 'cardio' ? 'time' : 'reps');
+}
+
+/** "10-12", "10 – 12", "10 a 12" o "10" → { min, max }. Devuelve null si no se entiende. */
+export function parseRepRange(text: string): { min: number; max: number } | null {
+  const m = text.trim().match(/^(\d{1,3})(?:\s*(?:-|–|—|a|al)\s*(\d{1,3}))?$/i);
+  if (!m) return null;
+  const a = +m[1], b = m[2] != null ? +m[2] : a;
+  return { min: Math.min(a, b), max: Math.max(a, b) };
+}
+export const fmtRepRange = (min: number, max: number) => (min === max ? `${min}` : `${min}–${max}`);
+
+/** Objetivo legible de un ejercicio de rutina: "3 × 10–12" o "1 × 30 min". */
+export function targetLabel(it: RoutineItem, mode: ExerciseMode) {
+  return mode === 'time'
+    ? `${it.targetSets} × ${it.targetMin ?? 0} min`
+    : `${it.targetSets} × ${fmtRepRange(it.repsMin, it.repsMax)}`;
+}
+
+/** Resumen de una serie para "Anterior": "60 kg × 8 @8" o "30 min · 12 km". */
+export function setSummary(s: WorkSet, mode: ExerciseMode) {
+  if (mode === 'time') {
+    return [s.durationSec ? `${Math.round((s.durationSec / 60) * 10) / 10} min` : '', s.distanceKm ? `${s.distanceKm} km` : '']
+      .filter(Boolean).join(' · ') + (s.rpe != null ? ` @${s.rpe}` : '');
+  }
+  return `${s.weight} ${s.unit} × ${s.reps}${s.rpe != null ? ` @${s.rpe}` : ''}`;
+}
 
 /** Segundos → m:ss (o h:mm:ss). */
 export function fmtTime(totalSec: number) {
@@ -75,21 +105,28 @@ export async function startSession(opts: { routineId?: ID; date?: string; calend
   const sessionId = uid();
   const t = Date.now();
 
-  await db.transaction('rw', [db.sessions, db.sessionExercises, db.sets, db.calendar], async () => {
+  await db.transaction('rw', [db.sessions, db.sessionExercises, db.sets, db.calendar, db.exercises], async () => {
     await db.sessions.add({
       id: sessionId, date, routineId: routine?.id, type: routine?.name ?? 'Sesión libre',
       startedAt: t, defaultRestSec: routine?.defaultRestSec ?? 120, status: 'active', updatedAt: t,
     });
     for (const [order, it] of (routine?.items ?? []).entries()) {
       const seId = uid();
+      const mode = modeOf(await db.exercises.get(it.exerciseId));
       await db.sessionExercises.add({
         id: seId, sessionId, exerciseId: it.exerciseId, order, restSec: it.restSec, notes: it.notes,
+        target: targetLabel(it, mode),
       });
       // Peso inicial = última carga usada en ese ejercicio
       const last = await lastWorkSet(it.exerciseId);
       await db.sets.bulkAdd(Array.from({ length: it.targetSets }, (_, idx) => ({
         id: uid(), sessionId, sessionExerciseId: seId, exerciseId: it.exerciseId, idx,
-        kind: 'work' as const, reps: it.repsMax, weight: last?.weight ?? 0, unit: last?.unit ?? 'kg',
+        kind: 'work' as const,
+        reps: mode === 'time' ? 0 : it.repsMax,
+        weight: mode === 'time' ? 0 : last?.weight ?? 0,
+        unit: last?.unit ?? 'kg',
+        durationSec: mode === 'time' ? (it.targetMin ?? 0) * 60 : undefined,
+        distanceKm: mode === 'time' ? last?.distanceKm : undefined,
         rpe: it.targetRpe, rir: it.targetRpe != null ? Math.max(0, Math.round(10 - it.targetRpe)) : undefined,
         done: false,
       })));
@@ -113,10 +150,14 @@ export async function addExerciseToSession(sessionId: ID, exerciseId: ID) {
   const count = await db.sessionExercises.where('sessionId').equals(sessionId).count();
   const seId = uid();
   const last = await lastWorkSet(exerciseId, sessionId);
+  const mode = modeOf(await db.exercises.get(exerciseId));
   await db.sessionExercises.add({ id: seId, sessionId, exerciseId, order: count });
   await db.sets.add({
     id: uid(), sessionId, sessionExerciseId: seId, exerciseId, idx: 0, kind: 'work',
-    reps: last?.reps ?? 10, weight: last?.weight ?? 0, unit: last?.unit ?? 'kg', done: false,
+    reps: mode === 'time' ? 0 : last?.reps ?? 10, weight: mode === 'time' ? 0 : last?.weight ?? 0, unit: last?.unit ?? 'kg',
+    durationSec: mode === 'time' ? last?.durationSec ?? 0 : undefined,
+    distanceKm: mode === 'time' ? last?.distanceKm : undefined,
+    done: false,
   });
 }
 

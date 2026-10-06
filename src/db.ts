@@ -23,8 +23,12 @@ export interface Exercise {
   muscle: Muscle;
   media: Media[];
   notes?: string;
+  /** Cómo se registra: peso × repeticiones o tiempo (+ distancia). Si falta, cardio = tiempo. */
+  mode?: ExerciseMode;
   updatedAt: number;
 }
+
+export type ExerciseMode = 'reps' | 'time';
 
 /** Ejercicio dentro de una plantilla (embebido en Routine). */
 export interface RoutineItem {
@@ -35,6 +39,8 @@ export interface RoutineItem {
   targetRpe?: number;
   restSec?: number;
   notes?: string;
+  /** Duración objetivo por serie/bloque en ejercicios por tiempo (min). */
+  targetMin?: number;
 }
 
 /** Plantilla de rutina: Empuje, Jalón, Pierna… */
@@ -74,6 +80,8 @@ export interface SessionExercise {
   /** Descanso ESPECÍFICO entre series; sobrescribe el global. */
   restSec?: number;
   notes?: string;
+  /** Objetivo copiado de la rutina, p. ej. "3 × 10–12" o "1 × 30 min". */
+  target?: string;
   updatedAt?: number;
 }
 
@@ -89,6 +97,9 @@ export interface WorkSet {
   unit: 'kg' | 'lb';
   rpe?: number;
   rir?: number;
+  /** Ejercicios por tiempo: duración (s) y distancia (km). */
+  durationSec?: number;
+  distanceKm?: number;
   /** Descanso real medido desde la serie anterior completada (s). */
   restTakenSec?: number;
   done: boolean;

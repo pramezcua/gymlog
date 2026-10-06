@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid, type Routine, type RoutineItem } from '../db';
 import PageHeader from '../components/PageHeader';
 import ExercisePicker from '../components/ExercisePicker';
-import { REST_OPTIONS, RPE_OPTIONS, fmtTime } from '../lib/utils';
+import { REST_OPTIONS, RPE_OPTIONS, fmtRepRange, fmtTime, modeOf, parseRepRange } from '../lib/utils';
 
 const COLORS = ['#a3e635', '#38bdf8', '#f97316', '#e879f9', '#facc15', '#f43f5e', '#2dd4bf', '#a78bfa'];
 const TYPES = ['Empuje', 'Jalón', 'Pierna', 'Torso', 'Full body', 'Brazos', 'Cardio', 'Otro'];
@@ -18,6 +18,7 @@ export default function RoutineEditor() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const exercises = useLiveQuery(() => db.exercises.toArray(), []) ?? [];
   const exName = (eid: string) => exercises.find(e => e.id === eid)?.name ?? '…';
+  const exMode = (eid: string) => modeOf(exercises.find(e => e.id === eid));
 
   useEffect(() => {
     if (isNew) setR({ id: uid(), name: '', type: 'Empuje', color: COLORS[0], defaultRestSec: 120, items: [], updatedAt: Date.now() });
@@ -81,10 +82,11 @@ export default function RoutineEditor() {
               <button className="btn-ghost px-3" disabled={i === r.items.length - 1} onClick={() => move(i, 1)} aria-label="Bajar">↓</button>
               <button className="btn-danger px-3" onClick={() => patch({ items: r.items.filter((_, j) => j !== i) })} aria-label="Quitar">✕</button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <Num label="Series" value={it.targetSets} onChange={v => patchItem(i, { targetSets: Math.max(1, v) })} />
-              <Num label="Reps mín" value={it.repsMin} onChange={v => patchItem(i, { repsMin: v })} />
-              <Num label="Reps máx" value={it.repsMax} onChange={v => patchItem(i, { repsMax: v })} />
+            <div className="grid grid-cols-2 gap-2">
+              <Num label={exMode(it.exerciseId) === 'time' ? 'Bloques' : 'Series'} value={it.targetSets} onChange={v => patchItem(i, { targetSets: Math.max(1, v) })} />
+              {exMode(it.exerciseId) === 'time'
+                ? <Num label="Duración (min)" value={it.targetMin ?? 0} onChange={v => patchItem(i, { targetMin: v })} />
+                : <RepRangeInput min={it.repsMin} max={it.repsMax} onChange={(repsMin, repsMax) => patchItem(i, { repsMin, repsMax })} />}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -107,6 +109,7 @@ export default function RoutineEditor() {
           </div>
         ))}
         <button onClick={() => setPicker(true)} className="min-h-14 w-full rounded-2xl border-2 border-dashed border-zinc-700 text-zinc-300">+ Añadir ejercicio</button>
+        <button onClick={save} className="btn-primary min-h-14 w-full text-lg">Guardar rutina</button>
 
         {!isNew && (confirmDelete ? (
           <div className="card space-y-2 p-3">
@@ -120,7 +123,11 @@ export default function RoutineEditor() {
       </div>
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)}
-        onPick={exerciseId => setR(cur => cur && ({ ...cur, items: [...cur.items, { exerciseId, targetSets: 3, repsMin: 8, repsMax: 12 }] }))} />
+        onPick={async exerciseId => {
+          const time = modeOf(await db.exercises.get(exerciseId)) === 'time';
+          const item = time ? { exerciseId, targetSets: 1, repsMin: 0, repsMax: 0, targetMin: 30 } : { exerciseId, targetSets: 3, repsMin: 10, repsMax: 12 };
+          setR(cur => cur && ({ ...cur, items: [...cur.items, item] }));
+        }} />
     </div>
   );
 }
@@ -131,6 +138,30 @@ function Num({ label, value, onChange }: { label: string; value: number; onChang
       <label className="label">{label}</label>
       <input type="number" inputMode="numeric" className="input text-center" value={value}
         onFocus={e => e.target.select()} onChange={e => onChange(Math.max(0, Math.round(+e.target.value || 0)))} />
+    </div>
+  );
+}
+
+/** Campo de repeticiones que acepta un número ("10") o un rango ("10-12"). */
+function RepRangeInput({ min, max, onChange }: { min: number; max: number; onChange: (min: number, max: number) => void }) {
+  const [text, setText] = useState(fmtRepRange(min, max).replace('–', '-'));
+  const [bad, setBad] = useState(false);
+  useEffect(() => setText(fmtRepRange(min, max).replace('–', '-')), [min, max]);
+  function commit() {
+    const r = parseRepRange(text);
+    if (!r) { setBad(true); return; }
+    setBad(false);
+    onChange(r.min, r.max);
+    setText(fmtRepRange(r.min, r.max).replace('–', '-'));
+  }
+  return (
+    <div>
+      <label className="label">Reps</label>
+      <input type="text" inputMode="text" className={`input text-center ${bad ? 'border-rose-500' : ''}`} value={text}
+        placeholder="10-12" aria-invalid={bad}
+        onFocus={e => e.target.select()} onChange={e => { setText(e.target.value); setBad(false); }}
+        onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+      {bad && <p className="mt-1 text-xs text-rose-300">Escribe un número (10) o un rango (10-12)</p>}
     </div>
   );
 }
