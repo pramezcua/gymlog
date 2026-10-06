@@ -7,7 +7,7 @@ import Routines from './pages/Routines';
 import RoutineEditor from './pages/RoutineEditor';
 import ExerciseLibrary from './pages/ExerciseLibrary';
 import ExerciseEditor from './pages/ExerciseEditor';
-import History from './pages/History';
+import { Navigate } from 'react-router';
 import Progress from './pages/Progress';
 import Settings from './pages/Settings';
 
@@ -24,7 +24,7 @@ export default function App() {
         <Route path="/rutinas/:id" element={<RoutineEditor />} />
         <Route path="/ejercicios" element={<ExerciseLibrary />} />
         <Route path="/ejercicios/:id" element={<ExerciseEditor />} />
-        <Route path="/historial" element={<History />} />
+        <Route path="/historial" element={<Navigate to="/calendario" replace />} />
         <Route path="/progreso" element={<Progress />} />
         <Route path="/ajustes" element={<Settings />} />
         <Route path="*" element={<Home />} />

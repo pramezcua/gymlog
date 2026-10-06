@@ -166,10 +166,10 @@ export default function SessionLogger() {
               <div className="rounded-xl bg-zinc-800 p-3"><p className="text-lg font-bold tabular-nums">{fmtVolume(volumeOf(allSets))}</p><p className="text-[11px] text-zinc-400">volumen</p></div>
             </div>
             {doneCount === 0 && <p className="rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">No has marcado ninguna serie como hecha (✓). Puedes finalizar igualmente.</p>}
-            <p className="text-sm text-zinc-400">Se guardará en tu historial y en el calendario: {fmtDateLong(session.date)}.</p>
+            <p className="text-sm text-zinc-400">Se guardará en el calendario: {fmtDateLong(session.date)}.</p>
             <div className="flex gap-2">
               <button className="btn-ghost flex-1" onClick={() => setConfirm(null)}>Seguir entrenando</button>
-              <button className="btn-primary flex-1" onClick={async () => { await finishSession(id); setRest(null); setConfirm(null); nav('/historial'); }}>Finalizar y guardar</button>
+              <button className="btn-primary flex-1" onClick={async () => { await finishSession(id); setRest(null); setConfirm(null); nav('/calendario'); }}>Finalizar y guardar</button>
             </div>
           </div>
         ) : (

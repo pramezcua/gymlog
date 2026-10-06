@@ -43,7 +43,7 @@ export default function Progress() {
 
   return (
     <div className="pb-24">
-      <PageHeader back title="Progreso" />
+      <PageHeader title="Progreso" />
       <div className="space-y-4 p-4">
         {withData.length === 0 ? (
           <p className="card p-6 text-center text-zinc-400">Completa alguna serie con peso para ver tu progreso.</p>

@@ -49,7 +49,7 @@ export default function ExerciseEditor() {
   }
   async function remove() {
     const used = await db.sets.where('exerciseId').equals(ex!.id).count();
-    if (used) { setError(`No se puede eliminar: tiene ${used} series registradas en el historial.`); setConfirmDelete(false); return; }
+    if (used) { setError(`No se puede eliminar: tiene ${used} series registradas en tus entrenamientos.`); setConfirmDelete(false); return; }
     for (const m of ex!.media) if (m.blobId) await db.media.delete(m.blobId);
     await db.exercises.delete(ex!.id);
     nav('/ejercicios');

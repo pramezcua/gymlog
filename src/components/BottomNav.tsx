@@ -4,7 +4,7 @@ const ITEMS = [
   { to: '/', label: 'Hoy', icon: 'M3 12l9-8 9 8M5 10v10h5v-6h4v6h5V10' },
   { to: '/calendario', label: 'Calendario', icon: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4' },
   { to: '/rutinas', label: 'Rutinas', icon: 'M4 6h16M4 12h16M4 18h10' },
-  { to: '/historial', label: 'Historial', icon: 'M12 7v5l3 3M3 12a9 9 0 1 0 3-6.7M3 4v4h4' },
+  { to: '/progreso', label: 'Progreso', icon: 'M4 19h16M6 15l4-4 3 3 5-6' },
   { to: '/ajustes', label: 'Ajustes', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19 12l2-1-1-3-2 .3-1.4-1.4.3-2-3-1-1 2h-2l-1-2-3 1 .3 2L5.8 7.3 4 7l-1 3 2 1v2l-2 1 1 3 2-.3 1.4 1.4-.3 2 3 1 1-2h2l1 2 3-1-.3-2 1.4-1.4 2 .3 1-3-2-1z' },
 ];
 
