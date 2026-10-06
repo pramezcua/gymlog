@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, uid, type SessionExercise, type WorkSet } from '../db';
@@ -302,15 +302,8 @@ function SetRow({ set, label, onComplete }: { set: WorkSet; label: string; onCom
             onClick={() => upd({ rir: Math.min(10, (set.rir ?? -1) + 1) })}>+</button>
         </span>
       </div>
-      <div className="mt-1 grid grid-cols-9 gap-1">
-        {RPE_OPTIONS.map(r => (
-          <button key={r} onClick={() => set.rpe === r ? upd({ rpe: undefined, rir: undefined }) : upd({ rpe: r, rir: Math.max(0, Math.round(10 - r)) })}
-            aria-label={`RPE ${r}`} aria-pressed={set.rpe === r}
-            className={`h-10 rounded-lg text-[13px] tabular-nums ${set.rpe === r ? 'bg-lime-400 font-bold text-zinc-950' : 'bg-zinc-800 text-zinc-300'}`}>
-            {r}
-          </button>
-        ))}
-      </div>
+      <RpeChips value={set.rpe} onPick={r => set.rpe === r ? upd({ rpe: undefined, rir: undefined }) : upd({ rpe: r, rir: Math.max(0, Math.round(10 - r)) })} />
+
 
       {more && (
         <div className="mt-2 grid grid-cols-3 gap-2">
@@ -324,5 +317,25 @@ function SetRow({ set, label, onComplete }: { set: WorkSet; label: string; onCom
         </div>
       )}
     </li>
+  );
+}
+
+/** Fila deslizable de RPE 0–10 (pasos de 0,5); al abrirse se centra en el valor elegido o en 7. */
+function RpeChips({ value, onPick }: { value?: number; onPick: (r: number) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = ref.current;
+    const chip = box?.querySelector<HTMLElement>(`[data-rpe="${value ?? 7}"]`);
+    if (box && chip) box.scrollLeft = chip.offsetLeft - box.clientWidth / 2 + chip.clientWidth / 2;
+  }, [value]);
+  return (
+    <div ref={ref} className="no-scrollbar relative mt-1 flex gap-1 overflow-x-auto scroll-smooth">
+      {RPE_OPTIONS.map(r => (
+        <button key={r} data-rpe={r} onClick={() => onPick(r)} aria-label={`RPE ${r}`} aria-pressed={value === r}
+          className={`h-10 min-w-11 shrink-0 rounded-lg text-[13px] tabular-nums ${value === r ? 'bg-lime-400 font-bold text-zinc-950' : r % 1 ? 'bg-zinc-800/70 text-zinc-400' : 'bg-zinc-800 text-zinc-200'}`}>
+          {String(r).replace('.', ',')}
+        </button>
+      ))}
+    </div>
   );
 }

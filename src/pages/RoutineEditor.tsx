@@ -91,7 +91,7 @@ export default function RoutineEditor() {
                 <label className="label">RPE objetivo</label>
                 <select className="input" value={it.targetRpe ?? ''} onChange={e => patchItem(i, { targetRpe: e.target.value ? +e.target.value : undefined })}>
                   <option value="">—</option>
-                  {RPE_OPTIONS.map(x => <option key={x} value={x}>{x} (RIR {Math.round(10 - x)})</option>)}
+                  {RPE_OPTIONS.map(x => <option key={x} value={x}>RPE {String(x).replace('.', ',')}{x >= 5 ? ` · RIR ${Math.round(10 - x)}` : ''}</option>)}
                 </select>
               </div>
               <div>

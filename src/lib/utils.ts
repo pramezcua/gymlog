@@ -1,7 +1,8 @@
 import { db, uid, type ID, type Media, type WorkSet } from '../db';
 
 export const REST_OPTIONS = [45, 60, 90, 120, 150, 180, 240, 300];
-export const RPE_OPTIONS = [6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
+/** Escala RPE de 0 a 10 en pasos de 0,5. */
+export const RPE_OPTIONS = Array.from({ length: 21 }, (_, i) => i / 2);
 
 /** Segundos → m:ss (o h:mm:ss). */
 export function fmtTime(totalSec: number) {
